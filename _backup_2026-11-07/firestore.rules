@@ -1,0 +1,109 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Regola per la collezione dei Like e dei Match
+    match /likes/{likeId} {
+      allow read, write: if request.auth != null;
+    }
+
+   // Regole per Le Chat e i Messaggi (inclusa la sotto-collezione)
+    match /chats/{chatId} {
+      allow read, write: if request.auth != null;
+
+      // Questa è la sotto-collezione dei messaggi dentro la chat
+      match /messages/{messageId} {
+        allow read, write: if request.auth != null;
+      }
+    }
+
+    // Regola necessaria per permettere il funzionamento di collectionGroup('messages')
+    match /{path=**}/messages/{messageId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Regola per la collezione 'offers' (Le promozioni) - Sbloccata per evitare errori
+    match /offers/{offerId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Regola per la collezione 'reviews' (Le recensioni) - Sbloccata per consentire agli utenti di recensire
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Regola per la collezione 'businesses' (I profili dei negozi)
+    match /businesses/{businessId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Regola per la collezione 'users' (I profili degli utenti - Unificata e corretta)
+    match /users/{userId} {
+      allow read: if true; // Lasciato true per permettere la lettura dei seed/profili
+      // Consente la scrittura o la creazione del proprio profilo (incluso Google e Telefono OTP) oppure dai seed
+      allow write: if true;
+    }
+
+    // Regola per gli eventi
+    match /events/{eventId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // -------------------------------------------------------------
+    // NUOVE REGOLE AGGIUNTE DA CLAUDE PER NOTIFICHE E MESSAGGI Letti
+    // -------------------------------------------------------------
+
+    // Notifiche: ogni utente legge le proprie e può solo segnarle come lette.
+    match /notifications/{notificationId} {
+      allow read: if request.auth != null
+                  && resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null
+                    && resource.data.userId == request.auth.uid
+                    && request.resource.data.diff(resource.data)
+                         .affectedKeys().hasOnly(['isRead']);
+    }
+
+    // Messaggi (specifici per il conteggio sicuro del badge e la lettura)
+    match /{path=**}/messages/{messageId} {
+      allow read: if request.auth != null
+                  && (resource.data.receiverId == request.auth.uid
+                      || resource.data.senderId == request.auth.uid);
+      allow update: if request.auth != null
+                    && resource.data.receiverId == request.auth.uid
+                    && request.resource.data.diff(resource.data)
+                         .affectedKeys().hasOnly(['isRead']);
+    }
+
+    // -------------------------------------------------------------
+    // COUPON DELLE OFFERTE (QR personale a uso singolo)
+    // -------------------------------------------------------------
+    // ID documento: {offerId}_{userId}
+    // - il cliente legge e crea solo il proprio coupon
+    // - il negoziante dell'offerta lo legge e può solo convalidarlo
+    //   (active -> redeemed), una volta sola
+    match /coupons/{couponId} {
+      allow read: if request.auth != null
+                  && (resource == null
+                      || resource.data.userId == request.auth.uid
+                      || resource.data.businessId == request.auth.uid);
+
+      allow create: if request.auth != null
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.status == 'active'
+                    && couponId == request.resource.data.offerId + '_' + request.auth.uid
+                    && request.resource.data.businessId ==
+                         get(/databases/$(database)/documents/offers/$(request.resource.data.offerId)).data.businessId;
+
+      allow update: if request.auth != null
+                    && resource.data.businessId == request.auth.uid
+                    && resource.data.status == 'active'
+                    && request.resource.data.status == 'redeemed'
+                    && request.resource.data.diff(resource.data)
+                         .affectedKeys().hasOnly(['status', 'redeemedAt']);
+    }
+  }
+}

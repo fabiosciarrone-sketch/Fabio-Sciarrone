@@ -1,0 +1,294 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------
+    // Funzioni di supporto
+    // -------------------------------------------------------------
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isMe(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // Campi dell'utente che può scrivere SOLO il server (Cloud Functions):
+    // i punti della classifica e il contatore dei punti profilo già dati.
+    function serverOnlyUserFields() {
+      return ['points', 'profilePointsAwarded', 'isDummy'];
+    }
+
+    // Gli ID chat sono i due UID ordinati e uniti da "_".
+    // (Non si usa split('_') perché gli ID dei profili demo, es.
+    // "martina_id", contengono anch'essi "_".)
+    function inChat(chatId) {
+      return signedIn()
+          && (chatId.matches(request.auth.uid + '_.+')
+              || chatId.matches('.+_' + request.auth.uid));
+    }
+
+    function isChatBetween(chatId, a, b) {
+      return chatId == a + '_' + b || chatId == b + '_' + a;
+    }
+
+    // -------------------------------------------------------------
+    // UTENTI
+    // -------------------------------------------------------------
+    match /users/{userId} {
+      // Leggibili solo da chi ha fatto l'accesso (prima: da chiunque su
+      // internet, comprese email e numero di telefono).
+      allow read: if signedIn();
+
+      // Creazione del proprio profilo. Unico valore di punti ammesso: il
+      // bonus di iscrizione (10) che mette auth_service.dart.
+      allow create: if isMe(userId)
+                    && !request.resource.data.keys().hasAny(['profilePointsAwarded', 'isDummy'])
+                    && (!('points' in request.resource.data)
+                        || request.resource.data.points == 10);
+
+      // Modifica: solo il proprio profilo e mai i campi del server.
+      allow update: if isMe(userId)
+                    && !request.resource.data.diff(resource.data)
+                         .affectedKeys().hasAny(serverOnlyUserFields());
+
+      // Cancellazione dell'account (richiesta anche da Google Play)
+      allow delete: if isMe(userId);
+    }
+
+    // -------------------------------------------------------------
+    // LIKE E SUPER LIKE
+    // (l'app usa due formati: fromUserId/toUserId e senderId/receiverId)
+    // -------------------------------------------------------------
+    match /likes/{likeId} {
+      allow read: if signedIn()
+                  && (resource.data.toUserId == request.auth.uid
+                      || resource.data.fromUserId == request.auth.uid
+                      || resource.data.receiverId == request.auth.uid
+                      || resource.data.senderId == request.auth.uid);
+
+      allow create: if signedIn()
+                    && (request.resource.data.fromUserId == request.auth.uid
+                        || request.resource.data.senderId == request.auth.uid);
+    }
+
+    // -------------------------------------------------------------
+    // CHAT E MESSAGGI
+    // -------------------------------------------------------------
+    match /chats/{chatId} {
+      // Solo i due partecipanti. Le condizioni sui campi servono alle query
+      // della lista chat (where participants/users arrayContains me).
+      allow read: if inChat(chatId)
+                  || (signedIn() && request.auth.uid in resource.data.participants)
+                  || (signedIn() && request.auth.uid in resource.data.users);
+      allow create, update: if inChat(chatId);
+
+      match /messages/{messageId} {
+        allow read: if inChat(chatId);
+
+        // Si scrive solo a nome proprio e solo all'altro partecipante
+        allow create: if inChat(chatId)
+                      && request.resource.data.senderId == request.auth.uid
+                      && isChatBetween(chatId, request.auth.uid,
+                                       request.resource.data.receiverId);
+
+        // Il destinatario può solo segnare il messaggio come letto
+        allow update: if signedIn()
+                      && resource.data.receiverId == request.auth.uid
+                      && request.resource.data.diff(resource.data)
+                           .affectedKeys().hasOnly(['isRead']);
+      }
+    }
+
+    // Per collectionGroup('messages') (badge dei non letti): la query filtra
+    // per receiverId == me, quindi basta questa condizione.
+    match /{path=**}/messages/{messageId} {
+      allow read: if signedIn()
+                  && (resource.data.receiverId == request.auth.uid
+                      || resource.data.senderId == request.auth.uid);
+    }
+
+    // -------------------------------------------------------------
+    // NOTIFICHE (le crea solo il server)
+    // -------------------------------------------------------------
+    match /notifications/{notificationId} {
+      allow read: if signedIn()
+                  && resource.data.userId == request.auth.uid;
+      allow update: if signedIn()
+                    && resource.data.userId == request.auth.uid
+                    && request.resource.data.diff(resource.data)
+                         .affectedKeys().hasOnly(['isRead']);
+    }
+
+    // -------------------------------------------------------------
+    // NEGOZI E OFFERTE
+    // -------------------------------------------------------------
+    // Il documento del negozio ha come ID l'UID del negoziante
+    match /businesses/{businessId} {
+      allow read: if true;
+      allow write: if isMe(businessId);
+    }
+
+    match /offers/{offerId} {
+      allow read: if true;
+      allow create: if signedIn()
+                    && request.resource.data.businessId == request.auth.uid;
+      // Il negoziante modifica/cancella solo le sue offerte e non può
+      // "regalarle" a un altro negozio cambiando businessId.
+      allow update: if signedIn()
+                    && resource.data.businessId == request.auth.uid
+                    && request.resource.data.businessId == request.auth.uid;
+      allow delete: if signedIn()
+                    && resource.data.businessId == request.auth.uid;
+    }
+
+    // -------------------------------------------------------------
+    // COUPON DELLE OFFERTE (QR personale a uso singolo)
+    // -------------------------------------------------------------
+    // ID documento: {offerId}_{userId}
+    // - il cliente legge e crea solo il proprio coupon
+    // - il negoziante dell'offerta lo legge e può solo convalidarlo
+    //   (active -> redeemed), una volta sola
+    match /coupons/{couponId} {
+      allow read: if signedIn()
+                  && (resource == null
+                      || resource.data.userId == request.auth.uid
+                      || resource.data.businessId == request.auth.uid);
+
+      allow create: if signedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.status == 'active'
+                    && couponId == request.resource.data.offerId + '_' + request.auth.uid
+                    && request.resource.data.businessId ==
+                         get(/databases/$(database)/documents/offers/$(request.resource.data.offerId)).data.businessId;
+
+      allow update: if signedIn()
+                    && resource.data.businessId == request.auth.uid
+                    && resource.data.status == 'active'
+                    && request.resource.data.status == 'redeemed'
+                    && request.resource.data.diff(resource.data)
+                         .affectedKeys().hasOnly(['status', 'redeemedAt']);
+    }
+
+    // -------------------------------------------------------------
+    // RECENSIONI
+    // -------------------------------------------------------------
+    match /reviews/{reviewId} {
+      allow read: if true;
+
+      allow create: if signedIn()
+                    && request.resource.data.userId == request.auth.uid;
+
+      // L'autore può modificare la sua recensione (ma non i Mi Piace)
+      allow update: if signedIn()
+                    && resource.data.userId == request.auth.uid
+                    && request.resource.data.userId == request.auth.uid
+                    && !request.resource.data.diff(resource.data)
+                         .affectedKeys().hasAny(['likes', 'likedBy']);
+
+      // Chiunque abbia fatto l'accesso può mettere o togliere SOLO il
+      // proprio Mi Piace
+      allow update: if signedIn()
+                    && request.resource.data.diff(resource.data)
+                         .affectedKeys().hasOnly(['likes', 'likedBy'])
+                    && request.resource.data.likedBy.toSet()
+                         .difference(resource.data.likedBy.toSet())
+                         .hasOnly([request.auth.uid])
+                    && resource.data.likedBy.toSet()
+                         .difference(request.resource.data.likedBy.toSet())
+                         .hasOnly([request.auth.uid]);
+
+      allow delete: if signedIn()
+                    && resource.data.userId == request.auth.uid;
+    }
+
+    // -------------------------------------------------------------
+    // COMMUNITY: STANZE, ISCRITTI E CHAT
+    // -------------------------------------------------------------
+    // places/{placeId}                  la stanza
+    // places/{placeId}/members/{uid}    chi si è unito
+    // places/{placeId}/messages/{id}    la chat della stanza
+    // membersCount, reportCount e hidden li scrive solo il server.
+    match /places/{placeId} {
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+                    && request.resource.data.createdBy == request.auth.uid
+                    && request.resource.data.membersCount == 0
+                    && request.resource.data.keys().hasOnly([
+                         'name', 'category', 'description', 'latitude',
+                         'longitude', 'membersCount', 'createdBy', 'createdAt'])
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() > 0
+                    && request.resource.data.name.size() <= 60
+                    && request.resource.data.category is string
+                    && (!('description' in request.resource.data)
+                        || (request.resource.data.description is string
+                            && request.resource.data.description.size() <= 300));
+
+      allow delete: if signedIn()
+                    && resource.data.createdBy == request.auth.uid;
+
+      // Iscrizione: ognuno si iscrive o si cancella solo da sé
+      match /members/{memberId} {
+        allow read: if signedIn();
+        allow create: if isMe(memberId)
+                      && request.resource.data.keys().hasOnly(['name', 'joinedAt']);
+        allow delete: if isMe(memberId);
+      }
+
+      // Chat: tutti gli utenti loggati leggono, scrive solo chi è iscritto
+      match /messages/{messageId} {
+        allow read: if signedIn();
+
+        allow create: if signedIn()
+                      && exists(/databases/$(database)/documents/places/$(placeId)/members/$(request.auth.uid))
+                      && request.resource.data.senderId == request.auth.uid
+                      && request.resource.data.keys().hasOnly([
+                           'senderId', 'senderName', 'text', 'imageBase64',
+                           'timestamp', 'hidden', 'reportCount'])
+                      && request.resource.data.hidden == false
+                      && request.resource.data.reportCount == 0
+                      && request.resource.data.text is string
+                      && request.resource.data.text.size() <= 1000
+                      && request.resource.data.senderName is string
+                      && request.resource.data.senderName.size() <= 80
+                      && (!('imageBase64' in request.resource.data)
+                          || (request.resource.data.imageBase64 is string
+                              && request.resource.data.imageBase64.size() <= 400000))
+                      && (request.resource.data.text.size() > 0
+                          || 'imageBase64' in request.resource.data);
+
+        // Ognuno può cancellare solo i propri messaggi
+        allow delete: if signedIn()
+                      && resource.data.senderId == request.auth.uid;
+      }
+    }
+
+    // -------------------------------------------------------------
+    // SEGNALAZIONI (utenti in chat privata e messaggi delle stanze)
+    // Si creano soltanto: non si leggono né si modificano dall'app,
+    // così la stessa segnalazione non si può ripetere (ID fisso).
+    // -------------------------------------------------------------
+    match /reports/{reportId} {
+      allow create: if signedIn()
+                    && request.resource.data.reporterId == request.auth.uid
+                    && (request.resource.data.get('type', '') != 'place_message'
+                        || (reportId == 'pm_' + request.resource.data.placeId + '_'
+                                       + request.resource.data.messageId + '_'
+                                       + request.auth.uid
+                            && request.resource.data.reportedUserId != request.auth.uid));
+    }
+
+    // -------------------------------------------------------------
+    // EVENTI: li carica solo lo script admin (populate_events.js)
+    // -------------------------------------------------------------
+    match /events/{eventId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Tutto il resto (points_ledger, points_daily, leaderboard_winners,
+    // app_config, ...) non ha regole: lo legge e scrive solo il server.
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "75703560636",
+    "project_id": "SideBySide-bd245",
+    "storage_bucket": "SideBySide-bd245.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:75703560636:android:a91d073980f9875696e3b9",
+        "android_client_info": {
+          "package_name": "com.example.SideBySide"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBg_nBxAzF_W4S6jiSAqvgKeUwNQrf2U4Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

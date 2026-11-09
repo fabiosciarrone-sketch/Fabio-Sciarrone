@@ -1,0 +1,105 @@
+{
+  "project_info": {
+    "project_number": "75703560636",
+    "project_id": "besidr-bd245",
+    "storage_bucket": "besidr-bd245.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:75703560636:android:471391d00daa2d9296e3b9",
+        "android_client_info": {
+          "package_name": "com.example.SideBySide"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "75703560636-tpeltst62knseefl1ukus1v6861puk4u.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.SideBySide",
+            "certificate_hash": "cb7eb621f0f457238919ac3fca716bdc432617e7"
+          }
+        },
+        {
+          "client_id": "75703560636-ks09fdenpvkini6c9l980ilntkf21jn5.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBg_nBxAzF_W4S6jiSAqvgKeUwNQrf2U4Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "75703560636-ks09fdenpvkini6c9l980ilntkf21jn5.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:75703560636:android:a91d073980f9875696e3b9",
+        "android_client_info": {
+          "package_name": "com.example.besidr"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "75703560636-ks09fdenpvkini6c9l980ilntkf21jn5.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBg_nBxAzF_W4S6jiSAqvgKeUwNQrf2U4Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "75703560636-ks09fdenpvkini6c9l980ilntkf21jn5.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:75703560636:android:944e83b1d244b50196e3b9",
+        "android_client_info": {
+          "package_name": "it.fabiosciarrone.sidebyside"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "75703560636-ks09fdenpvkini6c9l980ilntkf21jn5.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBg_nBxAzF_W4S6jiSAqvgKeUwNQrf2U4Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "75703560636-ks09fdenpvkini6c9l980ilntkf21jn5.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
