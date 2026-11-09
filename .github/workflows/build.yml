@@ -3,6 +3,7 @@ name: Build Android App Bundle
 on:
   push:
     branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -12,58 +13,74 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Clean gradle.properties
-        run: |
-          if [ -f android/gradle.properties ]; then
-            sed -i '/org.gradle.java.home/d' android/gradle.properties
-          fi
-
-      - name: Fix gradlew line endings and permissions
-        run: |
-          sed -i 's/\r$//' android/gradlew
-          chmod +x android/gradlew
-
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.x'
           channel: 'stable'
+          cache: true
 
-      - name: Check signing secrets
+      # 1. gradle.properties: via il percorso Windows del JDK (non esiste su Linux)
+      - name: Clean gradle.properties
         run: |
-          if [ -z "${{ secrets.KEYSTORE_BASE64 }}" ]; then echo "Secret mancante: KEYSTORE_BASE64"; exit 1; fi
-          if [ -z "${{ secrets.KEYSTORE_PASSWORD }}" ]; then echo "Secret mancante: KEYSTORE_PASSWORD"; exit 1; fi
-          if [ -z "${{ secrets.KEY_ALIAS }}" ]; then echo "Secret mancante: KEY_ALIAS"; exit 1; fi
-          if [ -z "${{ secrets.KEY_PASSWORD }}" ]; then echo "Secret mancante: KEY_PASSWORD"; exit 1; fi
-
-      - name: Restore Keystore and key.properties
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/upload-keystore.jks
-          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > android/key.properties
-          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
-          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
-          echo "storeFile=upload-keystore.jks" >> android/key.properties
-
-      - name: Restore google-services.json
-        run: |
-          if [ ! -f android/app/google-services.json ] && [ -n "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
-            echo "${{ secrets.GOOGLE_SERVICES_JSON }}" > android/app/google-services.json
+          find . -name gradle.properties -not -path "./.git/*" | while read -r f; do
+            sed -i 's/\r$//' "$f"
+            sed -i '/org\.gradle\.java\.home/d' "$f"
+            echo "--- $f ---"
+            cat "$f"
+          done
+          if grep -rn "org.gradle.java.home" --include=gradle.properties . ; then
+            echo "::error::org.gradle.java.home è ancora presente"
+            exit 1
           fi
 
-      - name: Install dependencies
-        run: flutter pub get
+      # gradlew committato da Windows: fine riga CRLF e permesso di esecuzione
+      - name: Fix gradlew for Linux
+        run: |
+          if [ -f android/gradlew ]; then
+            sed -i 's/\r$//' android/gradlew
+            chmod +x android/gradlew
+          fi
 
-      - name: Build AAB
-        run: flutter build appbundle --release
+      # 2. Firma: controlla che i secret esistano, poi ricrea keystore e key.properties
+      - name: Check signing secrets
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          missing=0
+          for v in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!v}" ]; then echo "::error::Secret mancante: $v"; missing=1; fi
+          done
+          exit $missing
 
-      - name: Upload AAB Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-aab
-          path: build/app/outputs/bundle/release/app-release.aab
+      - name: Create keystore and key.properties
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | tr -d '\r\n ' | base64 --decode > android/app/upload-keystore.jks
+          {
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyPassword=$KEY_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "storeFile=upload-keystore.jks"
+          } > android/key.properties
+          ls -l android/app/upload-keystore.jks
+
+      # 3. google-services.json: ricreato dal secret solo se non è già nel repository
+      - name: Create google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -f android/app/google-services.json ]; then
+            echo "google-services.json

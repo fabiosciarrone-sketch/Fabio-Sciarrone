@@ -1,0 +1,5 @@
+# Script Unix: sempre con fine riga LF, anche se il repo è su Windows
+android/gradlew text eol=lf
+*.sh text eol=lf
+*.bat text eol=crlf
+*.jar binary
