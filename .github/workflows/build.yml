@@ -28,6 +28,8 @@ jobs:
       # 1. gradle.properties: via il percorso Windows del JDK (non esiste su Linux)
       - name: Clean gradle.properties
         run: |
+          # Rimuove la proprietà da QUALSIASI gradle.properties del progetto
+          # (anche se la riga inizia con un BOM UTF-8 o ha spazi)
           find . -name gradle.properties -not -path "./.git/*" | while read -r f; do
             sed -i 's/\r$//' "$f"
             sed -i '/org\.gradle\.java\.home/d' "$f"
@@ -39,7 +41,8 @@ jobs:
             exit 1
           fi
 
-      # gradlew committato da Windows: fine riga CRLF e permesso di esecuzione
+      # gradlew committato da Windows: fine riga CRLF e permesso di esecuzione mancante
+      # bloccano Gradle su Linux ("sh\r: not found" / "Permission denied")
       - name: Fix gradlew for Linux
         run: |
           if [ -f android/gradlew ]; then
@@ -83,4 +86,23 @@ jobs:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
           if [ -f android/app/google-services.json ]; then
-            echo "google-services.json
+            echo "google-services.json già presente nel repository"
+          elif [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+            echo "google-services.json creato dal secret"
+          else
+            echo "::warning::google-services.json assente e secret GOOGLE_SERVICES_JSON non impostato"
+          fi
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # 4. Build
+      - name: Build AAB
+        run: flutter build appbundle --release
+
+      - name: Upload AAB Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-aab
+          path: build/app/outputs/bundle/release/app-release.aab
