@@ -12,6 +12,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Clean gradle.properties
+        run: |
+          if [ -f android/gradle.properties ]; then
+            sed -i '/org.gradle.java.home/d' android/gradle.properties
+          fi
+
+      - name: Fix gradlew line endings and permissions
+        run: |
+          sed -i 's/\r$//' android/gradlew
+          chmod +x android/gradlew
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -23,6 +34,27 @@ jobs:
         with:
           flutter-version: '3.x'
           channel: 'stable'
+
+      - name: Check signing secrets
+        run: |
+          if [ -z "${{ secrets.KEYSTORE_BASE64 }}" ]; then echo "Secret mancante: KEYSTORE_BASE64"; exit 1; fi
+          if [ -z "${{ secrets.KEYSTORE_PASSWORD }}" ]; then echo "Secret mancante: KEYSTORE_PASSWORD"; exit 1; fi
+          if [ -z "${{ secrets.KEY_ALIAS }}" ]; then echo "Secret mancante: KEY_ALIAS"; exit 1; fi
+          if [ -z "${{ secrets.KEY_PASSWORD }}" ]; then echo "Secret mancante: KEY_PASSWORD"; exit 1; fi
+
+      - name: Restore Keystore and key.properties
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/upload-keystore.jks
+          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > android/key.properties
+          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
+          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
+          echo "storeFile=upload-keystore.jks" >> android/key.properties
+
+      - name: Restore google-services.json
+        run: |
+          if [ ! -f android/app/google-services.json ] && [ -n "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
+            echo "${{ secrets.GOOGLE_SERVICES_JSON }}" > android/app/google-services.json
+          fi
 
       - name: Install dependencies
         run: flutter pub get
