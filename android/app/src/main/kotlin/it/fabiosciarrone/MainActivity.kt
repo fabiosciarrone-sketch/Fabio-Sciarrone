@@ -1,4 +1,4 @@
-package com.example.SideBySide
+package it.fabiosciarrone.sidebyside
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'ticket_ad_service.dart';
 
 class EventiDelGiornoScreen extends StatelessWidget {
   final String currentCity;
@@ -20,6 +21,9 @@ class EventiDelGiornoScreen extends StatelessWidget {
         );
         return;
       }
+
+      // Mostra l'annuncio a tutto schermo; il link si apre solo dopo la chiusura
+      await TicketAdService.showBeforeLeaving();
 
       final Uri url = Uri.parse(urlString);
       if (await canLaunchUrl(url)) {

@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'event_model.dart';
 import 'events_service.dart';
+import 'ticket_ad_service.dart';
 
 class EventsScreen extends StatelessWidget {
   final EventsService _eventsService = EventsService();
 
   Future<void> openTicketUrl(BuildContext context, String url) async {
+    // Mostra l'annuncio a tutto schermo; il link si apre solo dopo la chiusura
+    await TicketAdService.showBeforeLeaving();
+
     final Uri uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);

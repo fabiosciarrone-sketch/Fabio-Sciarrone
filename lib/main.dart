@@ -5,6 +5,7 @@ import 'firebase_options.dart';
 import 'home_screen.dart';
 import 'auth_screen.dart';
 import 'notification_service.dart';
+import 'ticket_ad_service.dart';
 
 // Chiave globale per gestire la navigazione e mostrare i popup delle notifiche
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -27,6 +28,9 @@ void main() async {
   } catch (e) {
     debugPrint("Errore durante l'inizializzazione delle notifiche: $e");
   }
+
+  // Inizializza gli annunci AdMob senza bloccare l'avvio dell'app
+  TicketAdService.initialize();
 
   // Avvia l'applicazione in ogni caso, evitando lo schermo bianco
   runApp(const MyApp());
