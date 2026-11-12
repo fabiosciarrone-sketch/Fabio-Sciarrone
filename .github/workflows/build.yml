@@ -23,6 +23,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          flutter-version: '3.47.9'
           cache: true
 
       # 1. gradle.properties: via il percorso Windows del JDK (non esiste su Linux)
