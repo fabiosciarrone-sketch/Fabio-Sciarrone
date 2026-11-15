@@ -100,6 +100,15 @@ class TicketAdService {
     }
   }
 
+  /// Garantisce che l'SDK degli annunci sia avviato (se il consenso lo
+  /// permette). Restituisce true quando si possono caricare annunci.
+  /// Usato anche da RewardedAdService per il video a premi del Profilo.
+  static Future<bool> ensureAdsStarted() async {
+    if (!_isSupported) return false;
+    if (!_initialized) await _startAdsIfAllowed();
+    return _initialized;
+  }
+
   /// true se la legge richiede di offrire all'utente un pulsante per
   /// modificare le scelte sulla privacy (da mostrare nelle impostazioni).
   static Future<bool> isPrivacyOptionsRequired() async {

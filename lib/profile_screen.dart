@@ -7,6 +7,7 @@ import 'business_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'legal_screen.dart';
 import 'photo_utils.dart';
+import 'rewarded_ad_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -32,12 +33,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isPremiumUser = false; // Stato Freemium / Premium (Punto 3)
 
   bool _isLoading = false;
+  bool _isAdBusy = false; // video a premi in caricamento / in riproduzione
   final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
     _loadUserProfile();
+    // Prepara il video a premi, cosi' parte subito al tocco del pulsante
+    RewardedAdService.preload();
   }
 
   @override
@@ -184,41 +188,69 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Mostra il video pubblicitario a premi. Cuori e diamanti vengono
+  /// accreditati solo da [_grantAdReward], cioe' dentro la callback
+  /// onUserEarnedReward, a visione completata.
   Future<void> _watchAdForReward() async {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(color: Colors.pink),
-      ),
+    if (_isAdBusy) return;
+    setState(() => _isAdBusy = true);
+
+    final result = await RewardedAdService.show(
+      onUserEarnedReward: _grantAdReward,
     );
 
-    await Future.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
+    setState(() => _isAdBusy = false);
 
+    switch (result) {
+      case RewardedAdResult.earned:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('🎉 Complimenti! Hai guadagnato +3 Cuori e +3 Diamanti!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        break;
+      case RewardedAdResult.closedEarly:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Guarda il video fino alla fine per ricevere Cuori e Diamanti.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        break;
+      case RewardedAdResult.unavailable:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Nessun video disponibile in questo momento. Riprova tra poco.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        break;
+    }
+  }
+
+  /// Chiamata da onUserEarnedReward: unico punto in cui si assegna il premio.
+  void _grantAdReward() {
     if (mounted) {
-      Navigator.of(context).pop();
-
       setState(() {
         _hearts += 3;
         _diamonds += 3;
       });
-
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-          'hearts': _hearts,
-          'diamonds': _diamonds,
-        }, SetOptions(merge: true));
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content:
-              Text('🎉 Complimenti! Hai guadagnato +3 Cuori e +3 Diamanti!'),
-          backgroundColor: Colors.green,
-        ),
-      );
     }
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+      'hearts': FieldValue.increment(3),
+      'diamonds': FieldValue.increment(3),
+    }, SetOptions(merge: true)).catchError((e) {
+      debugPrint('Errore accredito premio video: $e');
+    });
   }
 
   Future<void> _saveProfile() async {
@@ -367,10 +399,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                             ),
-                            onPressed: _watchAdForReward,
-                            icon: const Icon(Icons.video_library),
-                            label: const Text(
-                                'Guarda Video (+3 Cuori & +3 Diamanti)'),
+                            onPressed: _isAdBusy ? null : _watchAdForReward,
+                            icon: _isAdBusy
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.video_library),
+                            label: Text(_isAdBusy
+                                ? 'Caricamento video...'
+                                : 'Guarda Video (+3 Cuori & +3 Diamanti)'),
                           ),
                         ],
                       ),

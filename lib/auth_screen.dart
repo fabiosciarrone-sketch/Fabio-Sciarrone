@@ -4,7 +4,8 @@ import 'auth_service.dart';
 import 'phone_auth_screen.dart';
 
 /// Schermata di accesso / registrazione.
-/// Metodi: Email + password, Google, Numero di telefono (OTP).
+/// Metodi: Email + password, Numero di telefono (OTP).
+/// (Google temporaneamente disattivato.)
 /// Include "Password dimenticata?" con invio email di reset.
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -86,6 +87,9 @@ class _AuthScreenState extends State<AuthScreen> {
 
   // ------------------------------------------------------------ GOOGLE
 
+  // TEMPORANEAMENTE DISATTIVATO: il pulsante "Continua con Google" e'
+  // commentato piu' sotto. Per riattivarlo basta togliere il commento.
+  // ignore: unused_element
   Future<void> _google() async {
     if (!_checkPrivacy()) return;
     setState(() => _isLoading = true);
@@ -471,24 +475,24 @@ class _AuthScreenState extends State<AuthScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // ---- Google
-                _socialButton(
-                  label: 'Continua con Google',
-                  icon: Container(
-                    width: 22,
-                    height: 22,
-                    alignment: Alignment.center,
-                    decoration: const BoxDecoration(
-                        color: Colors.white, shape: BoxShape.circle),
-                    child: const Text('G',
-                        style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF4285F4))),
-                  ),
-                  onPressed: _isLoading ? null : _google,
-                ),
-                const SizedBox(height: 12),
+                // ---- Google (TEMPORANEAMENTE DISATTIVATO)
+                // _socialButton(
+                //   label: 'Continua con Google',
+                //   icon: Container(
+                //     width: 22,
+                //     height: 22,
+                //     alignment: Alignment.center,
+                //     decoration: const BoxDecoration(
+                //         color: Colors.white, shape: BoxShape.circle),
+                //     child: const Text('G',
+                //         style: TextStyle(
+                //             fontSize: 18,
+                //             fontWeight: FontWeight.bold,
+                //             color: Color(0xFF4285F4))),
+                //   ),
+                //   onPressed: _isLoading ? null : _google,
+                // ),
+                // const SizedBox(height: 12),
 
                 // ---- Telefono
                 _socialButton(
